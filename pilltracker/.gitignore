@@ -44,3 +44,6 @@ app-example
 
 
 firebase/config.js
+
+*.keystore
+*.jks

@@ -1,26 +1,30 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  SafeAreaView, Alert, KeyboardAvoidingView, Platform, ScrollView, Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import { auth } from '../firebase/config';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
+import { useTheme } from '../utils/theme';
 
 export default function SignUpScreen() {
+  const { colors } = useTheme();
+  const s = makeStyles(colors);
+
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]   = useState(false);
+
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim,  { toValue: 1, duration: 450, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 450, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   const handleSignUp = async () => {
     if (!fullName || !email || !password) {
@@ -31,12 +35,16 @@ export default function SignUpScreen() {
       Alert.alert('Weak password', 'Password must be at least 6 characters.');
       return;
     }
-
     setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(userCredential.user, { displayName: fullName });
-      router.replace('/dashboard' as any);
+      await sendEmailVerification(userCredential.user);
+      Alert.alert(
+        'Verify your email',
+        `A verification link has been sent to ${email}. Please check your inbox before signing in.`,
+        [{ text: 'OK', onPress: () => router.replace('/login' as any) }]
+      );
     } catch (error: any) {
       Alert.alert('Sign up failed', error.message);
     } finally {
@@ -45,113 +53,76 @@ export default function SignUpScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        <ScrollView contentContainerStyle={styles.scroll}>
+    <SafeAreaView style={s.container}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <Animated.ScrollView
+          contentContainerStyle={s.scroll}
+          style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
+        >
+          <Text style={s.logo}>💊</Text>
+          <Text style={s.title}>Create Account</Text>
+          <Text style={s.subtitle}>Start tracking your medications today</Text>
 
-          <Text style={styles.title}>Create Account</Text>
-
-          <Text style={styles.label}>Full Name</Text>
+          <Text style={s.label}>Full Name</Text>
           <TextInput
-            style={styles.input}
+            style={s.input}
             placeholder="Jane Doe"
+            placeholderTextColor={colors.textMuted}
             value={fullName}
             onChangeText={setFullName}
             autoCapitalize="words"
           />
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={s.label}>Email</Text>
           <TextInput
-            style={styles.input}
+            style={s.input}
             placeholder="jane@email.com"
+            placeholderTextColor={colors.textMuted}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
           />
 
-          <Text style={styles.label}>Password</Text>
+          <Text style={s.label}>Password</Text>
           <TextInput
-            style={styles.input}
+            style={s.input}
             placeholder="••••••••"
+            placeholderTextColor={colors.textMuted}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
           />
 
           <TouchableOpacity
-            style={styles.primaryButton}
+            style={[s.primaryButton, loading && { opacity: 0.6 }]}
             onPress={handleSignUp}
             disabled={loading}
           >
-            <Text style={styles.primaryButtonText}>
-              {loading ? 'Creating account...' : 'Sign Up'}
-            </Text>
+            <Text style={s.primaryButtonText}>{loading ? 'Creating account...' : 'Sign Up'}</Text>
           </TouchableOpacity>
 
-          <Text style={styles.orText}>or continue with</Text>
-
-          <View style={styles.socialRow}>
-            <TouchableOpacity style={styles.socialButton}>
-              <Text style={styles.socialText}>G</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.socialButton}>
-              <Text style={styles.socialText}>A</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* @ts-ignore */}
-          <TouchableOpacity onPress={() => router.push('/login')}>
-            <Text style={styles.loginText}>Already have an account? Log in</Text>
+          <TouchableOpacity onPress={() => router.push('/login' as any)}>
+            <Text style={s.linkText}>Already have an account? Log in</Text>
           </TouchableOpacity>
-
-        </ScrollView>
+        </Animated.ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  scroll: { padding: 24, gap: 12 },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    color: '#1a1a1a',
-  },
-  label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 4 },
+const makeStyles = (c: ReturnType<typeof useTheme>['colors']) => StyleSheet.create({
+  container:         { flex: 1, backgroundColor: c.background },
+  scroll:            { padding: 24, gap: 12, flexGrow: 1, justifyContent: 'center' },
+  logo:              { fontSize: 48, textAlign: 'center', marginBottom: 8 },
+  title:             { fontSize: 28, fontWeight: 'bold', color: c.text, marginBottom: 4 },
+  subtitle:          { fontSize: 15, color: c.textSecondary, marginBottom: 16 },
+  label:             { fontSize: 14, fontWeight: '600', color: c.text, marginBottom: 4 },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 16,
-    marginBottom: 8,
-    backgroundColor: '#fafafa',
+    borderWidth: 1, borderColor: c.inputBorder, borderRadius: 10,
+    padding: 14, fontSize: 16, marginBottom: 8, backgroundColor: c.inputBg, color: c.text,
   },
-  primaryButton: {
-    backgroundColor: '#1a1a1a',
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primaryButtonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
-  orText: { textAlign: 'center', color: '#999', marginVertical: 8 },
-  socialRow: { flexDirection: 'row', justifyContent: 'center', gap: 16 },
-  socialButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  socialText: { fontSize: 18, fontWeight: 'bold' },
-  loginText: { textAlign: 'center', color: '#666', marginTop: 8 },
+  primaryButton:     { backgroundColor: c.primary, paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
+  primaryButtonText: { color: c.primaryText, fontSize: 17, fontWeight: '600' },
+  linkText:          { textAlign: 'center', color: c.textSecondary, marginTop: 8, fontSize: 14 },
 });
